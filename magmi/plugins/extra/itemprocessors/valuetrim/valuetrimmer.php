@@ -34,7 +34,7 @@ class ValueTrimItemProcessor extends Magmi_ItemProcessor
         if (!$this->_scanned) {
             foreach (array_keys($item) as $col) {
                 $ainfo = $this->getAttrInfo($col);
-                if (count($ainfo) > 0) {
+                if ($ainfo!==null && count($ainfo) > 0) {
                     if ($ainfo["frontend_input"] == "select" || $ainfo["frontend_input"] == "multiselect") {
                         $this->_totrim[$col] = $ainfo["frontend_input"];
                     }

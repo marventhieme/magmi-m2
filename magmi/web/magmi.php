@@ -5,6 +5,10 @@ header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
 header('Last-Modified: ' . gmdate('D, d M Y H:i:s') . ' GMT');
 header('Cache-Control: private', false);
 
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('log_errors', 1);
+
 require_once("header.php");
 require_once("magmi_config.php");
 require_once("magmi_statemanager.php");

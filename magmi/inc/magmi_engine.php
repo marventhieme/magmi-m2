@@ -26,10 +26,6 @@ abstract class Magmi_Engine extends DbHelper
     protected $_builtinplugins = array();
     protected $_ploop_callbacks = array();
     private $_excid = 0;
-
-    /**
-     * @var null|Magmi_Logger
-     */
     public $logger = null;
     protected $_timingcats = array();
 
@@ -38,7 +34,7 @@ abstract class Magmi_Engine extends DbHelper
      */
     public function getEngineInfo()
     {
-        return array("name" => "Generic Magmi Engine","version" => "1.1","author" => "dweeves");
+        return array("name" => "Generic Magmi Engine", "version" => "1.1", "author" => "dweeves");
     }
 
     /**
@@ -89,6 +85,14 @@ abstract class Magmi_Engine extends DbHelper
     public function getMagentoVersion()
     {
         return $this->_conf->get("MAGENTO", "version");
+    }
+
+    /**
+     * @return bool
+     */
+    public function isEnterprise()
+    {
+        return (strpos($this->_conf->get("MAGENTO", "version"), 'EE') !== false);
     }
 
     /**
@@ -276,6 +280,11 @@ abstract class Magmi_Engine extends DbHelper
             $order += count($this->_activeplugins[$family]);
         }
 
+
+
+
+
+
         if (is_array($this->_activeplugins) && isset($this->_activeplugins[$family]) && isset($this->_activeplugins[$family][$order])) {
             return $this->_activeplugins[$family][$order];
         }
@@ -395,6 +404,8 @@ abstract class Magmi_Engine extends DbHelper
     {
         $this->_excid++;
         $trstr = "";
+        //todo: improve infinity loop handling in M2
+        $counter = 0;
         foreach ($traces as $trace) {
             if (isset($trace["file"])) {
                 $fname = str_replace(dirname(dirname(__FILE__)), "", $trace["file"]);
@@ -411,13 +422,17 @@ abstract class Magmi_Engine extends DbHelper
                     $trstr .= "\n";
                 }
             }
+            // simple max trace depth fix
+            if (++$counter % 20 === 0) {
+                break;
+            }
         }
         if (!isset($this->_exceptions[$tk])) {
-            $this->_exceptions[$tk] = array(0,$this->_excid);
+            $this->_exceptions[$tk] = array(0, $this->_excid);
         }
         $this->_exceptions[$tk][0]++;
         $trstr = "************************************\n$tk\n*************************************\n$trstr";
-        return array($trstr,$this->_exceptions[$tk][0] == 1,$this->_exceptions[$tk][1]);
+        return array($trstr, $this->_exceptions[$tk][0] == 1, $this->_exceptions[$tk][1]);
     }
 
     public function trace($e, $data = "")
@@ -458,7 +473,7 @@ abstract class Magmi_Engine extends DbHelper
             fclose($f);
             $enginf = $this->getEngineInfo();
             $this->log("MAGMI by dweeves - version:" . Magmi_Version::$version, "title");
-            $this->log("Running {$enginf["name"]} v${enginf["version"]} by ${enginf["author"]}", "startup");
+            $this->log("Running {$enginf["name"]} v{$enginf["version"]} by {$enginf["author"]}", "startup");
             if (!$this->_initialized) {
                 $this->initialize($params);
             }
@@ -499,7 +514,7 @@ abstract class Magmi_Engine extends DbHelper
             $conn = $this->getProp("DATABASE", "connectivity", "net");
             $debug = $this->getProp("DATABASE", "debug", false);
             $socket = $this->getProp("DATABASE", "unix_socket");
-            if ($conn === 'localxml') {
+            if ($conn == 'localxml') {
                 $baseDir = $this->getProp('MAGENTO', 'basedir');
                 $xmlPath = $baseDir . '/app/etc/local.xml';
                 if (!file_exists($xmlPath)) {
@@ -512,6 +527,18 @@ abstract class Magmi_Engine extends DbHelper
                 $user = $default_setup->username;
                 $pass = $default_setup->password;
                 $port = $default_setup->port;
+            } elseif ($conn === 'envphp') {
+                $envPath = dirname(__FILE__) . "/../../app/etc/env.php";
+                if (!file_exists($envPath)) {
+                    throw new Exception("Cannot load xml from path '$envPath'");
+                }
+                $env_array = include $envPath;
+                $host_array = explode(":", $env_array['db']['connection']['default']['host']);
+                $host = $host_array[0];
+                $port = isset($host_array[1]) ? $host_array[1] : '3306';
+                $dbname = $env_array['db']['connection']['default']['dbname'];
+                $user = $env_array['db']['connection']['default']['username'];
+                $pass = $env_array['db']['connection']['default']['password'];
             } else {
                 $host = $this->getProp("DATABASE", "host", "localhost");
                 $dbname = $this->getProp("DATABASE", "dbname", "magento");
@@ -524,6 +551,7 @@ abstract class Magmi_Engine extends DbHelper
             $this->_db->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, true);
         }
     }
+
     /*
      * Disconnect Magento db
      */

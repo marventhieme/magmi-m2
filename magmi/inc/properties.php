@@ -78,16 +78,10 @@ class Properties
         return $this->write_ini_file($this->_props, $fname, true);
     }
 
-    /**
-     * @param $assoc_arr
-     * @param $path
-     * @param bool $has_sections
-     * @return bool
-     */
     public function write_ini_file($assoc_arr, $path, $has_sections = false)
     {
         $content = "";
-        if (is_array($assoc_arr) and count($assoc_arr) > 0) {
+        if (is_array($assoc_arr) && count($assoc_arr) > 0) {
             if ($has_sections) {
                 foreach ($assoc_arr as $key => $elem) {
                     $content .= "[" . $key . "]\n";
@@ -157,7 +151,9 @@ class Properties
      */
     public function get($secname, $pname, $default = null)
     {
-        if (isset($this->_props[$secname]) && isset($this->_props[$secname][$pname])) {
+        if (isset($this->_props[$secname])
+            && isset($this->_props[$secname][$pname])
+            && $this->_props[$secname][$pname] != '') {
             $v = $this->_props[$secname][$pname];
             return $v;
         } else {

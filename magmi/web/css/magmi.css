@@ -416,7 +416,7 @@ div.pluginconfpanel.selected {
 }
 
 #runlog .runtime_info {
-	height: 100px;
+	/*height: 100px;*/
 	overflow: auto;
 }
 

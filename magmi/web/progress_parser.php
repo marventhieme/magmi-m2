@@ -107,6 +107,7 @@ class DefaultProgressLineParser extends ProgressLineParser
             case "itime":
                 $parts = explode("-", $info);
                 list($dcount, $delapsed, $dlastinc) = array(trim($parts[0]),trim($parts[1]),trim($parts[2]));
+                $delapsed = (float)$delapsed;
                 if (count($parts) > 3) {
                     $this->setData("$type:lastcount", trim($parts[3]));
                 }

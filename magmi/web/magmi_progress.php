@@ -31,7 +31,7 @@ if (file_exists($logfile)) {
     $_SESSION["log_warning"] = $warnings;
     session_write_close();
 } else {
-    die("NO FILE");
+    die("NO FILE: $logfile");
 }
 ?>
 <script type="text/javascript">
@@ -151,7 +151,7 @@ $info = $parser->getData("info");
 if (count($info) > 0):?>
 <div class="col">
 	<h3>Runtime infos</h3>
-	<div class="runtime_info">
+	<div>
 	<?php  foreach ($parser->getData("info") as $info):?>
 		<div class="log_standard"><?php echo $info?></div>
 	<?php endforeach?>

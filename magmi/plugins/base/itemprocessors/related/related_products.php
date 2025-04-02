@@ -255,14 +255,20 @@ class RelatedProducts extends Magmi_ItemProcessor
     {
         // remove maybe inserted doubles
         $cplai = $this->tablename("catalog_product_link_attribute_int");
-        $sql = "DELETE cplaix FROM $cplai as cplaix
- 		  WHERE cplaix.value_id IN
- 		  (SELECT s1.value_id FROM
- 		  	(SELECT cplai.link_id,cplai.value_id,MAX(cplai.value_id) as latest
- 		  		FROM $cplai as cplai
- 		  		GROUP BY cplai.link_id
-				HAVING cplai.value_id!=latest)
-			as s1)";
+
+        $sql = "DELETE cplaix FROM $cplai AS cplaix
+        WHERE cplaix.value_id IN (
+            SELECT value_id FROM (
+                SELECT cplai.value_id
+                FROM $cplai AS cplai
+                WHERE cplai.value_id != (
+                    SELECT MAX(cplai2.value_id)
+                    FROM $cplai AS cplai2
+                    WHERE cplai2.link_id = cplai.link_id
+                )
+            ) AS s1
+        )";
+
         $this->delete($sql);
     }
 

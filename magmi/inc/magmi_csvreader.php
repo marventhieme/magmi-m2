@@ -24,6 +24,7 @@ class Magmi_CSVReader extends Magmi_Mixin
 
     public function initialize($params = null, $prefix = 'CSV')
     {
+        var_dump($params);
         $this->_prefix = $prefix;
         if (isset($params)) {
             $this->_params = $params;
@@ -77,7 +78,6 @@ class Magmi_CSVReader extends Magmi_Mixin
     public function checkCSV()
     {
         $this->_curline = 0;
-        ini_set("auto_detect_line_endings", true);
         if (!isset($this->_filename)) {
             throw new Magmi_CSVException("No csv file set");
         }

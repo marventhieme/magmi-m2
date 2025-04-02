@@ -65,9 +65,6 @@ class FSHelper
  */
 class MagentoDirHandlerFactory
 {
-    /**
-     * @var array<MagentoDirHandler>
-     */
     protected $_handlers = array();
     protected static $_instance;
 
@@ -105,12 +102,12 @@ class MagentoDirHandlerFactory
      * Return a handler for a given url
      *
      * @param string $url
-     * @return MagentoDirHandler
+     * @return unknown
      */
     public function getHandler($url)
     {
         // Iterates on declared handlers , return first matching url
-        foreach ($this->_handlers as $handler) {
+        foreach ($this->_handlers as $cls => $handler) {
             if ($handler->canHandle($url)) {
                 return $handler;
             }
@@ -346,7 +343,7 @@ class LocalMagentoDirHandler extends MagentoDirHandler
     /**
      * Returns last error
      *
-     * @return array|null see https://php.net/manual/en/function.error-get-last.php
+     * @return Ambigous <multitype:, multitype:string multitype: >
      */
     public function getLastError()
     {
@@ -411,7 +408,7 @@ class LocalMagentoDirHandler extends MagentoDirHandler
      */
     public function exec_cmd($cmd, $params, $working_dir = null)
     {
-        $full_cmd = escapeshellcmd($cmd . " " . $params);
+        $full_cmd = $cmd . " " . $params;
         $curdir = false;
         $precmd = "";
         // If a working directory has been specified, switch to it

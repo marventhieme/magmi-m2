@@ -14,6 +14,7 @@ class Magmi_Auth extends Magmi_Engine
 {
     private $user;
     private $pass;
+    private bool $_hasDB = false;
 
     public function __construct($user, $pass)
     {
@@ -38,26 +39,50 @@ class Magmi_Auth extends Magmi_Engine
         }
         $tn = $this->tablename('admin_user');
         $result = $this->select("SELECT * FROM $tn WHERE username = ?", array($this->user))->fetch(PDO::FETCH_ASSOC);
-        return $this->validatePass($result['password'], $this->pass);
+        return $result && $this->validatePass($result['password'], $this->pass);
     }
 
-    /**
-     * @param string $dbHash from magento db
-     * @param string $pass provided by user
-     * @return bool
-     */
-    private function validatePass($dbHash, $pass)
+    private function validatePass($hash, $pass)
     {
         #first try : standard CE magento hash
 
-        $hash = explode(":", $dbHash);
-        $hashSuffix = $hash[1] ?? '';
-        $cecheck = md5($hashSuffix . $pass);
-        $eecheck = hash('sha256', $hashSuffix . $pass);
-        $valid = ($cecheck == $hash[0] || $eecheck == $hash[0]);
+        $hash = explode(":", $hash);
+        $cecheck = md5($hash[1] . $pass);
+        $eecheck = hash('sha256', $hash[1] . $pass);
+        $eecheckArgo = $this->getArgonHash($pass, $hash[1]);
+        $valid = ($cecheck == $hash[0] || $eecheck == $hash[0] || $eecheckArgo == $hash[0]);
 
         return $valid;
     }
+
+    /**
+     * Generate Argon2ID13 hash.
+     * Got from \Magento\Framework\Encryption\Encryptor
+     *
+     * @param string $data
+     * @param string $salt
+     * @return string
+     */
+    private function getArgonHash($data, $salt = '')
+    {
+        $salt = empty($salt) ?
+            random_bytes(SODIUM_CRYPTO_PWHASH_SALTBYTES) :
+            substr($salt, 0, SODIUM_CRYPTO_PWHASH_SALTBYTES);
+
+        if (strlen($salt) < SODIUM_CRYPTO_PWHASH_SALTBYTES) {
+            $salt = str_pad($salt, SODIUM_CRYPTO_PWHASH_SALTBYTES, $salt);
+        }
+
+        return bin2hex(sodium_crypto_pwhash(
+            SODIUM_CRYPTO_SIGN_SEEDBYTES,
+            $data,
+            $salt,
+            SODIUM_CRYPTO_PWHASH_OPSLIMIT_INTERACTIVE,
+            SODIUM_CRYPTO_PWHASH_MEMLIMIT_INTERACTIVE,
+            SODIUM_CRYPTO_PWHASH_ALG_ARGON2ID13
+        ));
+    }
+
 
     public function engineInit($params)
     {

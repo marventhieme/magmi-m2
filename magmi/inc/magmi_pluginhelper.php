@@ -51,7 +51,7 @@ class Magmi_PluginHelper
         $pluginclasses = array();
         foreach ($candidates as $pcfile) {
             $dirname = dirname(substr($pcfile, strlen($this->plugin_dir)));
-            if (substr(basename($dirname), 0, 2) !== '__') {
+            if (substr(basename($dirname), 0, 2) != '__') {
                 $content = file_get_contents($pcfile);
                 if (preg_match_all("/class\s+(.*?)\s+extends\s+$baseclass/mi", $content, $matches, PREG_SET_ORDER)) {
                     require_once($pcfile);
@@ -66,13 +66,13 @@ class Magmi_PluginHelper
 
     public function getPluginClasses($pltypes)
     {
-        return $this->getPluginsInfo($pltypes, "class");
+        return self::getPluginsInfo($pltypes, "class");
     }
 
     public function getPluginsInfo($pltypes, $filter = null)
     {
         if (self::$_plugins_cache == null) {
-            $this->scanPlugins($pltypes);
+            self::scanPlugins($pltypes);
         }
 
         if (isset($filter)) {
@@ -99,7 +99,7 @@ class Magmi_PluginHelper
         }
         foreach ($pltypes as $pltype) {
             if (!isset(self::$_plugins_cache[$pltype])) {
-                self::$_plugins_cache[$pltype] = $this->initPluginInfos(
+                self::$_plugins_cache[$pltype] = self::initPluginInfos(
                     $this->_plmeta[$pltype][0],
                     $this->_plmeta[$pltype][1]
                 );
@@ -107,18 +107,10 @@ class Magmi_PluginHelper
         }
     }
 
-    /**
-     * @template T
-     * @param $ptype
-     * @param class-string<T>|Magmi_Plugin $pclass
-     * @param null $params
-     * @param null $mmi
-     * @return mixed
-     */
     public function createInstance($ptype, $pclass, $params = null, $mmi = null)
     {
         if (!isset(self::$_plugins_cache[$ptype])) {
-            $this->scanPlugins($ptype);
+            self::scanPlugins($ptype);
         }
         $plinst = new $pclass();
 
@@ -132,14 +124,10 @@ class Magmi_PluginHelper
         return $mt["dir"];
     }
 
-    /**
-     * @param Magmi_Plugin $pinst plugin instance
-     * @return array
-     */
     public function getPluginMeta($pinst)
     {
         if (self::$_plugins_cache == null) {
-            $this->scanPlugins();
+            self::scanPlugins();
         }
 
         foreach (self::$_plugins_cache as $t => $l) {

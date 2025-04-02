@@ -13,6 +13,8 @@ password=<<YOUR PASSWORD>>
 [MAGENTO]
 ;magento base directory on host : ie : /media/Data/magento
 basedir="../.."
+;php + magento executable : ie : php /var/www/html/bin/magento
+magento_command = "php /var/www/html/bin/magento"
 ;change this if you are using localized "Enabled" status in non english languages
 ;enabled_status_label="Enabled"
 [GLOBAL]

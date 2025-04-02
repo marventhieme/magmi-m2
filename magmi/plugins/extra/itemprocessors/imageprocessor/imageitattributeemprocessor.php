@@ -9,7 +9,7 @@ class ImageAttributeItemProcessor extends Magmi_ItemProcessor
     protected $_errorimgs = array();
     protected $_lastimage = "";
     protected $_handled_attributes = array();
-    protected $_img_baseattrs = array("image","small_image","thumbnail");
+    protected $_img_baseattrs = array("image", "small_image", "thumbnail");
     protected $_active = false;
     protected $_newitem;
     protected $_mdh;
@@ -41,7 +41,7 @@ class ImageAttributeItemProcessor extends Magmi_ItemProcessor
 
     public function getPluginInfo()
     {
-        return array("name" => "Image attributes processor","author" => "Dweeves, Tommy Goode","version" => "1.0.33a",
+        return array("name" => "Image attributes processor", "author" => "Dweeves, Tommy Goode", "version" => "1.0.33a",
             "url" => $this->pluginDocUrl("Image_attributes_processor"));
     }
 
@@ -106,7 +106,7 @@ class ImageAttributeItemProcessor extends Magmi_ItemProcessor
                 $imagefile = $infolist[0];
             }
             unset($infolist);
-            $extra = array("store" => $storeid,"attr_code" => $attrcode,"imageindex" => $imageindex == 0 ? "" : $imageindex);
+            $extra = array("store" => $storeid, "attr_code" => $attrcode, "imageindex" => $imageindex == 0 ? "" : $imageindex);
             // copy it from source dir to product media dir
             $imagefile = $this->copyImageFile($imagefile, $item, $extra);
             unset($extra);
@@ -242,29 +242,28 @@ class ImageAttributeItemProcessor extends Magmi_ItemProcessor
      */
     public function getImageId($pid, $attid, $imgname, $refid = null, $store_id = 0)
     {
-        $t = $this->tablename('catalog_product_entity_media_gallery');
+        $t = $this->tablename('catalog_product_entity_media_gallery_value');
 
         $sql = "SELECT $t.value_id FROM $t ";
+        $vc = $this->tablename('catalog_product_entity_media_gallery');
         if ($refid != null) {
-            $vc = $this->tablename('catalog_product_entity_varchar');
-            $sql .= " JOIN $vc ON $t.entity_id=$vc.entity_id AND $t.value=$vc.value AND $vc.attribute_id=?
-					WHERE $t.entity_id=? AND $vc.store_id=?";
+            $sql .= "JOIN $vc ON $t.value_id=$vc.value_id WHERE $vc.attribute_id=? AND $t.entity_id=? AND $t.store_id=?";
             $imgid = $this->selectone($sql, array($refid, $pid, $store_id), 'value_id');
         } else {
-            $sql .= " WHERE value=? AND entity_id=? AND attribute_id=?";
-            $imgid = $this->selectone($sql, array($imgname, $pid, $attid), 'value_id');
+            $sql .= "JOIN $vc ON $t.value_id=$vc.value_id WHERE $t.entity_id=? AND $t.store_id=?";
+            $sql .= " AND $vc.value=? AND $vc.attribute_id=?";
+            $imgid = $this->selectone($sql, array($pid, $store_id, $imgname, $attid), 'value_id');
         }
 
         if ($imgid == null) {
             // insert image in media_gallery
-            $sql = "INSERT INTO $t
-				(attribute_id,entity_id,value)
+            $sql = "INSERT INTO $vc
+				(attribute_id,value)
 				VALUES
-				(?,?,?)";
-
-            $imgid = $this->insert($sql, array($attid, $pid, $imgname));
+				(?,?)";
+            $imgid = $this->insert($sql, array($attid, $imgname));
         } else {
-            $sql = "UPDATE $t
+            $sql = "UPDATE $vc
 				 SET value=?
 				 WHERE value_id=?";
             $this->update($sql, array($imgname, $imgid));
@@ -284,7 +283,7 @@ class ImageAttributeItemProcessor extends Magmi_ItemProcessor
         $tg = $this->tablename('catalog_product_entity_media_gallery');
         $sql = "DELETE emgv,emg FROM `$tgv` as emgv
 			JOIN `$tg` AS emg ON emgv.value_id = emg.value_id AND emgv.store_id=?
-			WHERE emg.entity_id=? AND emg.attribute_id=?";
+			WHERE emgv.entity_id=? AND emg.attribute_id=?";
         $this->delete($sql, array($storeid, $pid, $attid));
     }
 
@@ -317,30 +316,44 @@ class ImageAttributeItemProcessor extends Magmi_ItemProcessor
             // et maximum current position in the product gallery
             $sql = "SELECT MAX( position ) as maxpos
 					 FROM $tgv AS emgv
-					 JOIN $tg AS emg ON emg.value_id = emgv.value_id AND emg.entity_id = ?
+					 JOIN $tg AS emg ON emg.value_id = emgv.value_id AND emgv.entity_id = ?
 					 WHERE emgv.store_id=?
-			 		 GROUP BY emg.entity_id";
+			 		 GROUP BY emgv.entity_id";
             $pos = $this->selectone($sql, array($pid, $storeid), 'maxpos');
-            $pos = ($pos == null ? 0 : $pos + 1);
+            $pos = ($pos == null ? 1 : $pos + 1);
             // nsert new value (ingnore duplicates)
 
             $vinserts = array();
             $data = array();
 
             foreach ($targetsids as $tsid) {
-                $vinserts[] = "(?,?,?,?," . ($imglabel == null ? "NULL" : "?") . ")";
-                $data = array_merge($data, array($vid, $tsid, $pos, $excluded ? 1 : 0));
+                $vinserts[] = "(?,?,?,?,?," . ($imglabel == null ? "NULL" : "?") . ")";
+                $data = array_merge($data, array($vid, $tsid, $pos, 0, $pid));
                 if ($imglabel != null) {
                     $data[] = $imglabel;
                 }
             }
 
             if (count($data) > 0) {
-                $sql = "INSERT INTO $tgv
-					(value_id,store_id,position,disabled,label)
+                $this->exec_stmt('SET foreign_key_checks = 0');
+                $sql = "SELECT value_id FROM $tgv WHERE value_id = ?";
+                $valueId = $this->selectone($sql, array($vid), 'value_id');
+                if ($valueId) {
+                    $sql = "UPDATE $tgv SET store_id = ?, entity_id = ?, label = ?, position = ? WHERE value_id = ?";
+                    $this->update($sql, array($storeid, $pid, $imglabel, $pos, $valueId));
+                } else {
+                    $sql = "INSERT INTO $tgv
+					(value_id,store_id,position,disabled,entity_id,label)
 					VALUES " . implode(",", $vinserts) . "
 					ON DUPLICATE KEY UPDATE label=VALUES(`label`),disabled=VALUES(`disabled`)";
-                $this->insert($sql, $data);
+                    $this->insert($sql, $data);
+                }
+                // insert to catalog_product_entity_media_gallery_value_to_entity
+                $galleryRelationTable = $this->tablename('catalog_product_entity_media_gallery_value_to_entity');
+                $relationData = array($vid, $pid);
+                $sql_insert_relation = "INSERT IGNORE INTO {$galleryRelationTable} VALUES (?, ?)";
+                $this->insert($sql_insert_relation, $relationData);
+                $this->exec_stmt('SET foreign_key_checks = 1');
             }
             unset($vinserts);
             unset($data);
@@ -433,8 +446,7 @@ class ImageAttributeItemProcessor extends Magmi_ItemProcessor
         if ($this->isErrorImage($imgfile)) {
             if ($this->_newitem) {
                 $this->fillErrorAttributes($item);
-            }
-            ;
+            };
             return false;
         }
 
@@ -469,8 +481,9 @@ class ImageAttributeItemProcessor extends Magmi_ItemProcessor
         $i2 = $bimgfile[1];
         // magento image value (relative to media catalog)
         $impath = "/$i1/$i2/$bimgfile";
+
         // target directory;
-        $l2d = "media/catalog/product/$i1/$i2";
+        $l2d = $this->getParam("IMG:targetdir")."/catalog/product/$i1/$i2";
         // test for existence
         $targetpath = "$l2d/$bimgfile";
         /* test for same image (without problem) */
@@ -562,11 +575,11 @@ class ImageAttributeItemProcessor extends Magmi_ItemProcessor
         $tgv = $this->tablename('catalog_product_entity_media_gallery_value');
         $vc = $this->tablename('catalog_product_entity_varchar');
         $sql = "UPDATE $tgv as emgv
-		JOIN $tg as emg ON emg.value_id=emgv.value_id AND emg.entity_id=?
-		JOIN $vc  as ev ON ev.entity_id=emg.entity_id AND ev.value=emg.value and ev.attribute_id=?
+		JOIN $tg as emg ON emg.value_id=emgv.value_id
+		JOIN $vc  as ev ON ev.entity_id=emgv.entity_id AND ev.value=emg.value and ev.attribute_id=?
 		SET label=?
-		WHERE emgv.store_id IN (" . implode(",", $sids) . ")";
-        $this->update($sql, array($pid, $attrdesc["attribute_id"], $label));
+		WHERE emgv.store_id IN (" . implode(",", $sids) . ") AND emgv.entity_id=?";
+        $this->update($sql, array($attrdesc["attribute_id"], $label, $pid));
     }
 
     public function processItemAfterId(&$item, $params = null)
@@ -625,6 +638,7 @@ class ImageAttributeItemProcessor extends Magmi_ItemProcessor
     // Cleanup gallery from removed images if no more image values are present in any store
     public function endImport()
     {
+        $this->log('Cleaning up gallery from removed images', 'info');
         if (!$this->_active) {
             return;
         }
@@ -646,5 +660,36 @@ class ImageAttributeItemProcessor extends Magmi_ItemProcessor
             $this->log("Unexpected problem in image attributes retrieval", "warning");
         }
         unset($attids);
+
+        $this->log('Running commands for AWS storage...', 'info');
+        $this->runAWSCommands();
+    }
+
+    /**
+     * After importing the images locally, we need to run the following:
+     * - magento remote-storage:sync
+     * - magento catalog:images:resize -a --skip_hidden_images
+     * - magento indexer:reindex
+     */
+    private function runAWSCommands(): void
+    {
+        $this->log('Running magento remote-storage:sync...', 'info');
+        $this->execMagentoCommand('remote-storage:sync');
+
+        $this->log('Running magento catalog:images:resize -a --skip_hidden_images...', 'info');
+        $this->execMagentoCommand('catalog:images:resize -a --skip_hidden_images');
+
+        $this->log('Running magento indexer:reindex catalog_product_attribute...', 'info');
+        $this->execMagentoCommand('indexer:reindex catalog_product_attribute');
+    }
+
+    private function execMagentoCommand(string $command): void
+    {
+        $magentoCommand = Magmi_Config::getInstance()->get("MAGENTO", "magento_command");
+        $this->log("Command: ".$magentoCommand." ".$command, "info");
+
+        $out = $this->_mdh->exec_cmd($magentoCommand, $command);
+
+        $this->log("Output: ".$out, "info");
     }
 }

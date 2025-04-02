@@ -6,11 +6,16 @@
 	<span>Image search path:</span><input type="text" name="IMG:sourcedir"
 		size="80"
 		value="<?php echo $this->getParam("IMG:sourcedir", "media/import")?>"></input>
-	<div class="fieldinfo">
+	<!--<div class="fieldinfo">
 		semicolon separated list of search paths for images<br>if relative
 		path is used, it means "relative to magento base dir",absolute path is
 		used as is
-	</div>
+	</div>-->
+</div>
+<div class="formline">
+	<span>Image target path:</span><input type="text" name="IMG:targetdir"
+		size="80"
+		value="<?php echo $this->getParam("IMG:targetdir", "media/import")?>"></input>
 </div>
 <div class="formline ifield">
 	<span>Image Renaming:</span><input type="text" name="IMG:renaming"

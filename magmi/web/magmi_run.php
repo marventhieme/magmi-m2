@@ -2,7 +2,11 @@
 
 $params = $_REQUEST;
 require_once("security.php");
-ini_set("display_errors", 1);
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/error_log.txt'); // Log errors to a file
+
 require_once("../inc/magmi_defs.php");
 require_once("../inc/magmi_statemanager.php");
 

@@ -69,6 +69,8 @@ class AttributeSetImporter extends Magmi_GeneralImportPlugin
                                     'valueSeparator' => ':',
                                     'columnNames' => array(
                                             'attribute_group_name',
+                                            'attribute_group_code',
+                                            'tab_group_code',
                                             'default_group_id',
                                             'sort_order'
                                     ),

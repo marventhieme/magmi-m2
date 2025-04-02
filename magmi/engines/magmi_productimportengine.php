@@ -71,6 +71,10 @@ class Magmi_ProductImportEngine extends Magmi_Engine
     //handlers cache
     private $_handlercache = array();
 
+    private $_attributeEntityIdName = 'entity_id';
+
+    private $datasource;
+
     /**
      * Constructor
      * add default attribute processor
@@ -169,7 +173,7 @@ class Magmi_ProductImportEngine extends Magmi_Engine
             $cpet = $this->tablename("catalog_product_entity_$bt");
             $storeids = $this->getItemStoreIds($item);
             $sid = $storeids[0];
-            $sql = "SELECT attribute_id,value FROM $cpet WHERE entity_id=? AND store_id=? AND attribute_id IN (" . $this->arr2values($bta[$bt]) . ")";
+            $sql = "SELECT attribute_id,value FROM $cpet WHERE ". $this->getProductColumnId() ."=? AND store_id=? AND attribute_id IN (" . $this->arr2values($bta[$bt]) . ")";
             $tdata = $this->selectAll($sql, array_merge(array($params["product_id"], $sid), $bta[$bt]));
             foreach ($tdata as $row) {
                 $out[$idcodemap[$row["attribute_id"]]] = $row["value"];
@@ -223,12 +227,20 @@ class Magmi_ProductImportEngine extends Magmi_Engine
             } else {
                 $sql = "SELECT `$tname`.* FROM `$tname` WHERE ($tname.attribute_code IN ($qcolstr)) AND (entity_type_id=?)";
             }
+
             $toscan[] = $this->getProductEntityType();
             $result = $this->selectAll($sql, $toscan);
+
+
 
             $attrinfs = array();
             // create an attribute code based array for the wanted columns
             foreach ($result as $r) {
+                // It is for consistent for magento 1 data structure
+                if ($r['attribute_code'] == 'media_gallery') {
+                    $r['backend_type'] = 'varchar';
+                }
+
                 $attrinfs[$r["attribute_code"]] = $r;
             }
             unset($result);
@@ -294,7 +306,7 @@ class Magmi_ProductImportEngine extends Magmi_Engine
         $bt = $attrinf['backend_type'];
         $user = $attrinf['is_user_defined'];
         //checking specific extension custom model for selects that might not respect magento default model
-        if ($user == 1 && $bt == 'int' && $finp == 'select' && isset($smodel) && $smodel != "eav/entity_attribute_source_table") {
+        if ($user == 1 && $bt == 'int' && $finp == 'select' && isset($smodel) && $smodel != "eav/entity_attribute_source_table" && $smodel != "Magento\Eav\Model\Entity\Attribute\Source\Table") {
             $this->log("Potential assignment problem, specific model found for select attribute => " . $attrinf['attribute_code'] . "($smodel)", "warning");
         }
     }
@@ -343,7 +355,7 @@ class Magmi_ProductImportEngine extends Magmi_Engine
             $this->_sid_sscope[$scodes] = array();
             $scarr = csl2arr($scodes);
             $qcolstr = $this->arr2values($scarr);
-            $cs = $this->tablename("core_store");
+            $cs = $this->tablename("store");
             $sql = "SELECT csmain.store_id from $cs as csmain WHERE csmain.code IN ($qcolstr)";
             $sidrows = $this->selectAll($sql, $scarr);
             foreach ($sidrows as $sidrow) {
@@ -366,7 +378,7 @@ class Magmi_ProductImportEngine extends Magmi_Engine
             $this->_sid_wsscope[$scodes] = array();
             $wscarr = csl2arr($scodes);
             $qcolstr = $this->arr2values($wscarr);
-            $cs = $this->tablename("core_store");
+            $cs = $this->tablename("store");
             $sql = "SELECT csdep.store_id FROM $cs as csmain
                     JOIN $cs as csdep ON csdep.website_id=csmain.website_id
                     WHERE csmain.code IN ($qcolstr) ";
@@ -733,7 +745,7 @@ class Magmi_ProductImportEngine extends Magmi_Engine
      */
     public function findItemStores($pid)
     {
-        $sql = "SELECT cs.code FROM " . $this->tablename("catalog_product_website") . " AS cpw " . "JOIN " . $this->tablename("core_store") . " as cs ON cs.website_id=cpw.website_id " . "WHERE cpw.product_id=?";
+        $sql = "SELECT cs.code FROM " . $this->tablename("catalog_product_website") . " AS cpw " . "JOIN " . $this->tablename("store") . " as cs ON cs.website_id=cpw.website_id " . "WHERE cpw.product_id=?";
         $result = $this->selectAll($sql, array($pid));
         $scodes = array();
         foreach ($result as $row) {
@@ -815,7 +827,7 @@ class Magmi_ProductImportEngine extends Magmi_Engine
     public function touchProduct($pid)
     {
         $tname = $this->tablename('catalog_product_entity');
-        $this->update("UPDATE $tname SET updated_at=? WHERE entity_id=?", array(strftime("%Y-%m-%d %H:%M:%S"), $pid));
+        $this->update("UPDATE $tname SET updated_at=? WHERE entity_id=?", array(date("Y-m-d H:i:s"), $pid));
     }
 
     public function engineRun($params, $forcebuiltin = array())
@@ -825,7 +837,6 @@ class Magmi_ProductImportEngine extends Magmi_Engine
         $this->log("step:" . $this->getProp("GLOBAL", "step", 0.5) . "%", "step");
         $this->log("Attributeset update is " . ($this->getProp("GLOBAL", "noattsetupdate", "off") == "on" ? "dis" : "en") . "abled.", "startup");
         //$this->createPlugins($this->_profile, $params);
-
         //$this->callPlugins("datasources,general", "beforeImport");
         $this->initImport($params);
         $this->datasource = $this->getDataSource();
@@ -890,7 +901,6 @@ class Magmi_ProductImportEngine extends Magmi_Engine
         $this->callPlugins("datasources,general,itemprocessors", "afterImport");
         $this->log("Import Ended", "end");
         Magmi_StateManager::setState("idle");
-
         $timers = $this->_timecounter->getTimers();
         $f = fopen(Magmi_StateManager::getStateDir() . "/timings.txt", "w");
         foreach ($timers as $cat => $info) {
@@ -943,13 +953,16 @@ class Magmi_ProductImportEngine extends Magmi_Engine
 
     /**
      * retrieves attribute set id for a given attribute set name
-     *
-     * @param string $asname
-     *            : attribute set name
+     * @param $asname
+     * @return int
+     * @throws Exception
      */
     public function getAttributeSetId($asname)
     {
         $this->initAttrSetInfos();
+        if (!isset($this->attribute_sets[$asname])) {
+            throw new \Exception("Unknown attribute set '$asname'");
+        }
         return $this->attribute_sets[$asname];
     }
 
@@ -1047,36 +1060,30 @@ class Magmi_ProductImportEngine extends Magmi_Engine
         $res = array("ok" => 0, "last" => 0);
         $canceled = false;
         $this->_current_row++;
+        if ($rstep == 0) {
+            $rstep = 1;
+        }
         if ($this->_current_row % $rstep == 0) {
             $this->reportStats($this->_current_row, $tstart, $tdiff, $lastdbtime, $lastrec);
         }
         try {
             if (is_array($item) && count($item) > 0) {
                 // import item
-                $transactionStarted = $this->beginTransaction();
-                if (!$transactionStarted) {
-                    $this->log("ERROR - RECORD #$this->_current_row - could not start transaction", "error");
-                }
+                $this->beginTransaction();
                 $importedok = $this->importItem($item);
                 if ($importedok) {
                     $res["ok"] = true;
                     $this->commitTransaction();
                 } else {
                     $res["ok"] = false;
-                    $rolledBack = $this->rollbackTransaction();
-                    if (!$rolledBack) {
-                        $this->log("ERROR - RECORD #$this->_current_row - could not roll back transaction, status: " . $rolledBack === null ? 'null' : 'false', "error");
-                    }
+                    $this->rollbackTransaction();
                 }
             } else {
                 $this->log("ERROR - RECORD #$this->_current_row - INVALID RECORD", "error");
             }
             // intermediary measurement
         } catch (Exception $e) {
-            $rolledBack = $this->rollbackTransaction();
-            if (!$rolledBack) {
-                $this->log("ERROR - RECORD #$this->_current_row - could not roll back transaction on Exception", "error");
-            }
+            $this->rollbackTransaction();
             $res["ok"] = false;
             $this->logException($e, "ERROR ON RECORD #$this->_current_row");
             if ($e->getMessage() == "MAGMI_RUN_CANCELED") {
@@ -1087,13 +1094,10 @@ class Magmi_ProductImportEngine extends Magmi_Engine
             unset($item);
             $res["last"] = 1;
         }
-
         unset($item);
         $this->updateSkuStats($res);
-
         return $res;
     }
-
     public function reportStats($nrow, &$tstart, &$tdiff, &$lastdbtime, &$lastrec)
     {
         $tend = microtime(true);
@@ -1117,11 +1121,9 @@ class Magmi_ProductImportEngine extends Magmi_Engine
             throw new Exception("MAGMI_RUN_CANCELED");
         }
         // first step
-
         if (!$this->callPlugins("itemprocessors", "processItemBeforeId", $item)) {
             return false;
         }
-
         // check if sku has been reset
         if (!isset($item["sku"]) || trim($item["sku"]) == '') {
             $this->log('No sku info found for record #' . $this->_current_row, "error");
@@ -1131,24 +1133,40 @@ class Magmi_ProductImportEngine extends Magmi_Engine
         $this->handleIgnore($item);
         // get Item identifiers in magento
         $itemids = $this->getItemIds($item);
-
         // extract product id & attribute set id
-        $pid = $itemids["pid"];
+        $realPid = $pid = $itemids["pid"];  // $realPid takes in account EE Version
         $asid = $itemids["asid"];
-
         $isnew = false;
         if (isset($pid) && $this->mode == "xcreate") {
             $this->log("skipping existing sku:{$item["sku"]} - xcreate mode set", "skip");
             return false;
         }
-
         if (!isset($pid)) {
             if ($this->mode !== 'update') {
                 if (!isset($asid)) {
                     $this->log("cannot create product sku:{$item["sku"]}, no attribute_set defined", "error");
                     return false;
                 }
-                $pid = $this->createProduct($item, $asid);
+
+                if ($this->isEnterprise()) {
+                    $tableSequenceName = $this->tablename('sequence_product');
+                    if ($this->tableExists($tableSequenceName)) {
+                        $this->exec_stmt("INSERT INTO $tableSequenceName () VALUES ();");
+                        $item['entity_id'] = $this->lastInsertId();
+                        $item['updated_in'] = 2147483647;
+                    }
+                }
+
+                $realPid = $pid = $this->createProduct($item, $asid);
+
+                /**
+                 * In case of Enterprise, row_id is the auto_increment column with product entity
+                 */
+                if ($this->isEnterprise() && !isset($item['row_id'])) {
+                    $item['row_id'] = $pid;
+                    $realPid = $item['entity_id'];
+                }
+
                 $this->_curitemids["pid"] = $pid;
                 $isnew = true;
             } else {
@@ -1163,7 +1181,7 @@ class Magmi_ProductImportEngine extends Magmi_Engine
                 // compared to attribute set in db -> change!
                 if (isset($item['attribute_set'])) {
                     $newAsId = $this->getAttributeSetId($item['attribute_set']);
-                    if (isset($newAsId) && $newAsId != $asid) {
+                    if ($newAsId != $asid) {
                         // attribute set changed!
                         $item['attribute_set_id'] = $newAsId;
                         $asid = $newAsId;
@@ -1171,27 +1189,22 @@ class Magmi_ProductImportEngine extends Magmi_Engine
                     }
                 }
             }
-            $this->updateProduct($item, $pid);
+            $this->updateProduct($item, $realPid);
         }
-
         try {
-            $basemeta = array("product_id" => $pid, "new" => $isnew, "same" => $this->_same, "asid" => $asid);
+            $basemeta = array("product_id" => $realPid, "new" => $isnew, "same" => $this->_same, "asid" => $asid);
             $fullmeta = array_merge($basemeta, $itemids);
-
             if (!$this->callPlugins("itemprocessors", "preprocessItemAfterId", $item, $fullmeta)) {
                 return false;
             }
-
             if (!$this->callPlugins("itemprocessors", "processItemAfterId", $item, $fullmeta)) {
                 return false;
             }
-
             if (count($item) == 0) {
                 return true;
             }
             // handle "computed" ignored columns from afterImport
             $this->handleIgnore($item);
-
             if (!$this->checkstore($item, $pid, $isnew)) {
                 $this->log("invalid store value, skipping item");
                 return false;
@@ -1201,24 +1214,22 @@ class Magmi_ProductImportEngine extends Magmi_Engine
             // create new ones
             $attrmap = $this->attrbytype;
             do {
-                $attrmap = $this->createAttributes($pid, $item, $attrmap, $isnew, $itemids);
+                // In Enterprise case, use row_id
+                $attrmap = $this->createAttributes((isset($item['row_id']) ? $item['row_id'] : $pid), $item, $attrmap, $isnew, $itemids);
             } while (count($attrmap) > 0);
-
             if (!testempty($item, "category_ids") || (isset($item["category_reset"]) && $item["category_reset"] == 1)) {
                 // assign categories
-                $this->assignCategories($pid, $item);
+                $this->assignCategories($realPid, $item);
             }
-
             // update websites if column is set
             if (isset($item["websites"]) || $isnew) {
-                $this->updateWebSites($pid, $item);
+                $this->updateWebSites($realPid, $item);
             }
-
             //fix for multiple stock update
             //always update stock
-            $this->updateStock($pid, $item, $isnew);
+            $this->updateStock($realPid, $item, $isnew);
+            $this->touchProduct($realPid);
 
-            $this->touchProduct($pid);
             // ok,we're done
             if (!$this->callPlugins("itemprocessors", "processItemAfterImport", $item, $fullmeta)) {
                 return false;
@@ -1240,7 +1251,7 @@ class Magmi_ProductImportEngine extends Magmi_Engine
     public function getItemIds($item)
     {
         $sku = $item["sku"];
-        if (strcmp($sku, $this->_curitemids["sku"]) != 0) {
+        if (strcmp($sku, $this->_curitemids["sku"] ?? '') != 0) {
             // try to find item ids in db
             $cids = $this->getProductIds($sku);
             if ($cids !== false) {
@@ -1326,8 +1337,8 @@ class Magmi_ProductImportEngine extends Magmi_Engine
         $item['type_id'] = $item['type'];
         $item['attribute_set_id'] = $asid;
         $item['entity_type_id'] = $this->getProductEntityType();
-        $item['created_at'] = strftime("%Y-%m-%d %H:%M:%S");
-        $item['updated_at'] = strftime("%Y-%m-%d %H:%M:%S");
+        $item['created_at'] = date("Y-m-d H:i:s");
+        $item['updated_at'] = date("Y-m-d H:i:s");
         $columns = array_intersect(array_keys($item), $this->getProdCols());
         $values = $this->filterkvarr($item, $columns);
         $sql = "INSERT INTO `$tname` (" . implode(",", $columns) . ") VALUES (" . $this->arr2values($columns) . ")";
@@ -1358,18 +1369,12 @@ class Magmi_ProductImportEngine extends Magmi_Engine
      */
     public function updateProduct($item, $pid)
     {
-        //do not update catalog_product_entity table when not needed e.g. usually magmi updates sku, entity_type_id
-        //to the same values as they were before. The updated_at is also updated at the end of processing in touchProduct()
-        $shouldUpdateProductTable = (bool)$this->_conf->get('MAGENTO', 'catalog_product_entity_update', true);
-        if (!$shouldUpdateProductTable) {
-            return;
-        }
         $tname = $this->tablename('catalog_product_entity');
         if (isset($item['type'])) {
             $item['type_id'] = $item['type'];
         }
         $item['entity_type_id'] = $this->getProductEntityType();
-        $item['updated_at'] = strftime("%Y-%m-%d %H:%M:%S");
+        $item['updated_at'] = date("Y-m-d H:i:s");
         $columns = array_intersect(array_keys($item), $this->getProdCols());
         $values = $this->filterkvarr($item, $columns);
 
@@ -1401,7 +1406,7 @@ class Magmi_ProductImportEngine extends Magmi_Engine
 
         $scarr = explode(",", $scodes);
         trimarray($scarr);
-        $sql = "SELECT code FROM " . $this->tablename("core_store") . " WHERE code IN (" . $this->arr2values($scarr) . ")";
+        $sql = "SELECT code FROM " . $this->tablename("store") . " WHERE code IN (" . $this->arr2values($scarr) . ")";
         $result = $this->selectAll($sql, $scarr);
         $rscodes = array();
         foreach ($result as $row) {
@@ -1463,16 +1468,6 @@ class Magmi_ProductImportEngine extends Magmi_Engine
                 $attid = $attrdesc["attribute_id"];
                 // get attribute set id
                 $asid = $itemids["asid"];
-
-                // Ignore user defined attributes not in current attribute set!
-                if ($attrdesc["is_user_defined"] && !isset($this->attribute_set_infos[$asid][$attid])) {
-                    continue;
-                }
-                // check item type is compatible with attribute apply_to
-                if ($attrdesc["apply_to"] != null && strpos($attrdesc["apply_to"], strtolower($itemids["type"])) === false) {
-                    // do not handle attribute if it does not apply to the product type
-                    continue;
-                }
                 // get attribute value in the item to insert based on code
                 $attrcode = $attrdesc["attribute_code"];
 
@@ -1481,15 +1476,35 @@ class Magmi_ProductImportEngine extends Magmi_Engine
                 if (!array_key_exists($attrcode, $item)) {
                     continue;
                 }
+
                 // get the item value
                 $ivalue = $item[$attrcode];
+
+                // Ignore user defined attributes not in current attribute set!
+                if ($attrdesc["is_user_defined"] && !isset($this->attribute_set_infos[$asid][$attid])) {
+                    if (!empty($ivalue)) {
+                        $this->log("Ignoring $attrcode value as it is not in the attribute set $asid", "warning");
+                    }
+                    continue;
+                }
+                // check item type is compatible with attribute apply_to
+                if ($attrdesc["apply_to"] != null && strpos($attrdesc["apply_to"], strtolower($itemids["type"])) === false) {
+                    if (!empty($ivalue)) {
+                        $this->log("Ignoring $attrcode value as it does not apply to item type", "warning");
+                    }
+                    continue;
+                }
+
                 // get item store id for the current attribute
                 //if is global then , global scope applies but if configurable, back to store view scope since
                 //it's a select
                 $scope = $attrdesc["is_global"];
-                if ($attrcode != "price" && $attrdesc["is_configurable"] == 1) {
-                    $scope = 0;
-                }
+
+                //Disabled checking "is_configurable" because is deprecated in Magento 2
+                //if ($attrcode != "price" && $attrdesc["is_configurable"] == 1)
+                //{
+                //    $scope = 0;
+                //}
 
                 $store_ids = $this->getItemStoreIds($item, $scope);
 
@@ -1534,12 +1549,11 @@ class Magmi_ProductImportEngine extends Magmi_Engine
                     }
                     // if we have something to do with this value
                     if ($ovalue !== false && $ovalue !== null) {
-                        $data[] = $this->getProductEntityType();
                         $data[] = $attid;
                         $data[] = $store_id;
                         $data[] = $pid;
                         $data[] = $ovalue === '__NULL__' ? null : $ovalue;
-                        $insstr = "(?,?,?,?,?)";
+                        $insstr = "(?,?,?,?)";
                         $inserts[] = $insstr;
                     }
 
@@ -1550,8 +1564,8 @@ class Magmi_ProductImportEngine extends Magmi_Engine
                         array_shift($sids);
                         if (count($sids) > 0) {
                             $sidlist = implode(",", $sids);
-                            $ddata = array($this->getProductEntityType(), $attid, $pid);
-                            $sql = "DELETE FROM $cpet WHERE entity_type_id=? AND attribute_id=? AND store_id IN ($sidlist) AND entity_id=?";
+                            $ddata = array($attid, $pid);
+                            $sql = "DELETE FROM $cpet WHERE attribute_id=? AND store_id IN ($sidlist) AND ". $this->getProductColumnId() ."=?";
                             $this->delete($sql, $ddata);
                             unset($ddata);
                         }
@@ -1565,7 +1579,7 @@ class Magmi_ProductImportEngine extends Magmi_Engine
                 // now perform insert for all values of the the current backend type in one
                 // single insert
                 $sql = "INSERT INTO $cpet
-                        (`entity_type_id`, `attribute_id`, `store_id`, `entity_id`, `value`)
+                        (`attribute_id`, `store_id`, `". $this->getProductColumnId() ."`, `value`)
                         VALUES ";
                 $sql .= implode(",", $inserts);
                 // this one taken from mysql log analysis of magento import
@@ -1579,8 +1593,8 @@ class Magmi_ProductImportEngine extends Magmi_Engine
                 foreach ($deletes as $store_id => $to_delete) {
                     $sidlist = $store_id;
                     $attidlist = implode(",", $to_delete);
-                    $sql = "DELETE FROM $cpet WHERE entity_type_id=? AND attribute_id IN ($attidlist) AND store_id IN ($sidlist) AND entity_id=?";
-                    $this->delete($sql, array($this->getProductEntityType(), $pid));
+                    $sql = "DELETE FROM $cpet WHERE attribute_id IN ($attidlist) AND store_id IN ($sidlist) AND ". $this->getProductColumnId() ."=?";
+                    $this->delete($sql, $pid);
                 }
             }
             //if no values inserted or deleted on a new item, we have a problem
@@ -1748,7 +1762,7 @@ class Magmi_ProductImportEngine extends Magmi_Engine
         $wsids = $this->getItemWebsites($item);
         $qcolstr = $this->arr2values($wsids);
         $cpst = $this->tablename("catalog_product_website");
-        $cws = $this->tablename("core_website");
+        $cws = $this->tablename("store_website");
         // associate product with all websites in a single multi insert (use ignore to avoid duplicates)
         $ddata = array($pid);
         $sql = "DELETE FROM `$cpst` WHERE product_id=?";
@@ -1770,7 +1784,7 @@ class Magmi_ProductImportEngine extends Magmi_Engine
             if (!isset($this->_wsids[$item["websites"]])) {
                 $this->_wsids[$item["websites"]] = array();
 
-                $cws = $this->tablename("core_website");
+                $cws = $this->tablename("store_website");
                 $wscodes = csl2arr($item["websites"]);
                 $qcolstr = $this->arr2values($wscodes);
                 $rows = $this->selectAll("SELECT website_id FROM $cws WHERE code IN ($qcolstr)", $wscodes);
@@ -1788,7 +1802,7 @@ class Magmi_ProductImportEngine extends Magmi_Engine
 
         if (!isset($this->_wsids[$k])) {
             $this->_wsids[$k] = array();
-            $cs = $this->tablename("core_store");
+            $cs = $this->tablename("store");
             if (trim($k) != "admin") {
                 $scodes = csl2arr($k);
                 $qcolstr = $this->arr2values($scodes);
@@ -1822,6 +1836,9 @@ class Magmi_ProductImportEngine extends Magmi_Engine
         }
         $csit = $this->tablename("cataloginventory_stock_item");
         $css = $this->tablename("cataloginventory_stock_status");
+        $isi = $this->tablename("inventory_source_item");
+        $cpe = $this->tablename("catalog_product_entity");
+
         // alculate is_in_stock flag
         if (isset($item["qty"])) {
             if (!isset($item["manage_stock"])) {
@@ -1841,6 +1858,9 @@ class Magmi_ProductImportEngine extends Magmi_Engine
         $sql = "INSERT IGNORE INTO `$csit` (product_id,stock_id) VALUES (?,?)";
         $this->insert($sql, array($pid, $stock_id));
 
+        //       $sql = "INSERT IGNORE INTO `$isi` (source_code, sku, quantity, status) select 'default', sku, qty, stock_status from (`$css` as lg join `$cpe` as prd on((lg.product_id = prd.entity_id)))";
+        //       $this->insert($sql);
+
         if (count($common) > 0) {
             $stockvals = $this->filterkvarr($item, $common);
 
@@ -1852,8 +1872,11 @@ class Magmi_ProductImportEngine extends Magmi_Engine
                 // if magmi_qty_absolute flag is not set, then use standard "relative" qty parsing.
                 if (!isset($item["magmi_qty_absolute"]) || $item["magmi_qty_absolute"] == 0) {
                     // test for relative qty
-                    if ($item["qty"][0] == "+" || $item["qty"][0] == "-") {
-                        $relqty = getRelative($item["qty"]);
+                    //  PHP 8.1 change - test for array - we get an error if $item["qty"] is not an array
+                    if (is_array($item["qty"])) {
+                        if ($item["qty"][0] == "+" || $item["qty"][0] == "-") {
+                            $relqty = getRelative($item["qty"]);
+                        }
                     }
                 }
                 // if relative qty
@@ -1891,7 +1914,7 @@ class Magmi_ProductImportEngine extends Magmi_Engine
         }
         $sql = "INSERT INTO `$css` SELECT '$pid' as product_id,ws.website_id,cis.stock_id,'$qty' as qty,? as stock_status
                 FROM `$cpe` as cpe
-                    JOIN " . $this->tablename("core_website") . " as ws ON ws.website_id IN (" . $this->arr2values($wsids) . ")
+                    JOIN " . $this->tablename("store_website") . " as ws ON ws.website_id IN (" . $this->arr2values($wsids) . ")
                     JOIN " . $this->tablename("cataloginventory_stock") . " as cis ON cis.stock_id=?
                 WHERE cpe.entity_id=?
                 ON DUPLICATE KEY UPDATE stock_status=VALUES(`stock_status`),qty=VALUES(`qty`)";
@@ -1937,5 +1960,17 @@ class Magmi_ProductImportEngine extends Magmi_Engine
         $this->log("Import Ended", "end");
 
         Magmi_StateManager::setState("idle");
+    }
+
+    /**
+     * @return string
+     */
+    public function getProductColumnId()
+    {
+        if ($this->isEnterprise()) {
+            return 'row_id';
+        }
+
+        return 'entity_id';
     }
 }

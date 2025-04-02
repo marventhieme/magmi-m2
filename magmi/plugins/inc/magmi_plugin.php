@@ -54,9 +54,6 @@ class Magmi_PluginConfig extends ProfileBasedConfig
 
 class Magmi_PluginOptionsPanel
 {
-    /**
-     * @var Magmi_Plugin
-     */
     private $_plugin;
     private $_defaulthtml = "";
     private $_file = null;
@@ -111,26 +108,11 @@ class Magmi_PluginOptionsPanel
 
 abstract class Magmi_Plugin extends Magmi_Mixin
 {
-    /**
-     * @var string
-     */
     protected $_class;
     protected $_plugintype;
     protected $_plugindir;
-
-    /**
-     * @var Magmi_PluginConfig
-     */
     protected $_config;
-
-    /**
-     * @var Magmi_Config
-     */
     protected $_magmiconfig;
-
-    /**
-     * @var array
-     */
     protected $_pluginmeta;
     protected $_params;
 
@@ -161,7 +143,7 @@ abstract class Magmi_Plugin extends Magmi_Mixin
 
     public function fixListParam($pvalue)
     {
-        $iarr = explode(",", $pvalue);
+        $iarr = explode(",", $pvalue ?? '');
         $oarr = array();
         foreach ($iarr as $v) {
             if ($v != "") {
@@ -240,13 +222,6 @@ abstract class Magmi_Plugin extends Magmi_Mixin
         return $this->_magmiconfig;
     }
 
-    /**
-     * @param $mmi
-     * @param array $meta
-     * @param null $params
-     * @param bool $doinit
-     * @param null $profile
-     */
     final public function pluginInit($mmi, $meta, $params = null, $doinit = true, $profile = null)
     {
         $this->bind($mmi);
@@ -267,10 +242,6 @@ abstract class Magmi_Plugin extends Magmi_Mixin
         }
     }
 
-    /**
-     * @param array $params
-     * @return array
-     */
     public function getPluginParamsNoCurrent($params)
     {
         $arr = array();
@@ -285,10 +256,6 @@ abstract class Magmi_Plugin extends Magmi_Mixin
         return $arr;
     }
 
-    /**
-     * @param array $params $_REQUEST array
-     * @return array parameters which are related to given plugin
-     */
     public function getPluginParams($params)
     {
         $arr = array();

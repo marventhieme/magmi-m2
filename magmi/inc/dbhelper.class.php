@@ -10,9 +10,6 @@ include_once("timecounter.php");
 
 class DBHelper
 {
-    /**
-     * @var PDO
-     */
     protected $_db;
     protected $_debug;
     protected $_laststmt;
@@ -25,7 +22,6 @@ class DBHelper
     protected $_tcats;
     protected $_tables2columns = array();
     protected $_dbname;
-    protected $_debugfile;
 
     public function __construct()
     {
@@ -480,10 +476,9 @@ class DBHelper
      */
     public function beginTransaction()
     {
-        $success = $this->_db->beginTransaction();
+        $this->_db->beginTransaction();
         $this->_intrans = true;
         //$this->logdebug("-- TRANSACTION BEGIN --");
-        return $success;
     }
 
     /**
@@ -491,10 +486,9 @@ class DBHelper
      */
     public function commitTransaction()
     {
-        $committed = $this->_db->commit();
+        $this->_db->commit();
         $this->_intrans = false;
         //$this->logdebug("-- TRANSACTION COMMIT --");
-        return $committed;
     }
 
     /**
@@ -502,13 +496,11 @@ class DBHelper
      */
     public function rollbackTransaction()
     {
-        $rolledBack = null;
         if ($this->_intrans) {
-            $rolledBack = $this->_db->rollBack();
+            $this->_db->rollBack();
             $this->_intrans = false;
             // $this->logdebug("-- TRANSACTION ROLLBACK --");
         }
-        return $rolledBack;
     }
 
     /**
@@ -593,7 +585,6 @@ class DBHelper
         // ensure windows/mac compatibility for user made requests
         $sql = str_replace("\r\n", "\n", $sql);
         $sqllines = explode("--", $sql);
-        $stmts = [];
         foreach ($sqllines as $sqlline) {
             if ($sqlline != "") {
                 $subs = explode(";\n", "--" . $sqlline);
@@ -638,5 +629,23 @@ class DBHelper
             $this->_tables2columns[$tablename] = $columnNames;
             return $columnNames;
         }
+    }
+
+    /**
+     * @param $tableName
+     * @return bool
+     */
+    public function tableExists($tableName)
+    {
+        $sql = 'SHOW TABLES LIKE ?';
+        return !empty($this->exec_stmt($sql, array($tableName))->rowCount());
+    }
+
+    /**
+     * @return int|null
+     */
+    public function lastInsertId()
+    {
+        return $this->_db->lastInsertId();
     }
 }

@@ -15,14 +15,7 @@ class Magmi_ReindexingPlugin extends Magmi_GeneralImportPlugin
 {
     protected $_reindex;
     protected $_indexlist = null;
-
-    /**
-     * @var MagentoDirHandler
-     */
     protected $_mdh;
-    /**
-     * @var IdxEng
-     */
     protected $_eng;
 
     public function getPluginInfo()
@@ -39,12 +32,12 @@ class Magmi_ReindexingPlugin extends Magmi_GeneralImportPlugin
             $this->_eng->connectToMagento();
         }
 
-        $sql = "SELECT indexer_code FROM " . $this->_eng->tablename('index_process');
+        $sql = "SELECT indexer_id FROM ".$this->_eng->tablename('indexer_state');
         $result = $this->_eng->selectAll($sql);
         $idxlist = array();
         if (count($result)) {
             foreach ($result as $row) {
-                $idxlist[] = $row["indexer_code"];
+                $idxlist[] = $row["indexer_id"];
             }
             return implode(',', $idxlist);
         } else {
@@ -95,7 +88,7 @@ class Magmi_ReindexingPlugin extends Magmi_GeneralImportPlugin
 
     public function getPluginParamNames()
     {
-        return array("REINDEX:indexes","REINDEX:phpcli");
+        return array("REINDEX:indexes","MAGENTO:magento_command");
     }
 
     public function getIndexList()
@@ -112,27 +105,28 @@ class Magmi_ReindexingPlugin extends Magmi_GeneralImportPlugin
         if (session_id() !== "") {
             session_write_close();
         }
-        $cl = $this->getParam("REINDEX:phpcli", 'php') . " shell/indexer.php";
+        $magentoCommand = Magmi_Config::getInstance()->get("MAGENTO", "magento_command");
+
         $idxlstr = $this->getParam("REINDEX:indexes", "");
         $idxlist = explode(",", $idxlstr);
         if (count($idxlist) == 0) {
             $this->log("No indexes selected , skipping reindexing...", "warning");
             return true;
         }
-        foreach ($idxlist as $idx) {
-            $tstart = microtime(true);
-            $this->log("Reindexing $idx....", "info");
 
-            // Execute Reindex command, and specify that it should be ran from Magento directory
-            $out = $this->_mdh->exec_cmd($cl, "--reindex $idx", $this->_mdh->getMagentoDir());
-            $this->log($out, "info");
-            $tend = microtime(true);
-            $this->log("done in " . round($tend - $tstart, 2) . " secs", "info");
-            if (Magmi_StateManager::getState() === "canceled") {
-                exit();
-            }
-            flush();
+        $indexes = implode(" ", $idxlist);
+        $tstart = microtime(true);
+        $this->log("Reindexing $indexes....", "info");
+        $out = $this->_mdh->exec_cmd($magentoCommand, "indexer:reindex $indexes");
+        $this->log($out, "info");
+        $tend = microtime(true);
+        $this->log("done in " . round($tend - $tstart, 2) . " secs", "info");
+        if (Magmi_StateManager::getState() == "canceled") {
+            exit();
         }
+        flush();
+
+        return true;
     }
 
 

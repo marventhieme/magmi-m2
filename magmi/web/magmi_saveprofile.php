@@ -2,27 +2,27 @@
 
 require_once("security.php");
 $profile = $_REQUEST["profile"];
-$dataSourceClasses = $_REQUEST["PLUGINS_DATASOURCES:class"];
-$generalClasses = $_REQUEST["PLUGINS_GENERAL:classes"];
-$itemProcessorClasses = $_REQUEST["PLUGINS_ITEMPROCESSORS:classes"];
-if (!isset($itemProcessorClasses)) {
-    $itemProcessorClasses = "";
+$dslist = $_REQUEST["PLUGINS_DATASOURCES:class"];
+$genlist = $_REQUEST["PLUGINS_GENERAL:classes"];
+$iplist = $_REQUEST["PLUGINS_ITEMPROCESSORS:classes"];
+if (!isset($iplist)) {
+    $iplist = "";
 }
-if (!isset($generalClasses)) {
-    $generalClasses = "";
+if (!isset($genlist)) {
+    $genlist = "";
 }
-$plugins = array();
+$pflist = array();
 
-foreach (explode(",", $dataSourceClasses) as $className) {
-    $plugins[$className] = "datasources";
-}
-
-foreach (explode(",", $generalClasses) as $className) {
-    $plugins[$className] = "general";
+foreach (explode(",", $dslist) as $pclass) {
+    $pflist[$pclass] = "datasources";
 }
 
-foreach (explode(",", $itemProcessorClasses) as $className) {
-    $plugins[$className] = "itemprocessors";
+foreach (explode(",", $genlist) as $pclass) {
+    $pflist[$pclass] = "general";
+}
+
+foreach (explode(",", $iplist) as $pclass) {
+    $pflist[$pclass] = "itemprocessors";
 }
 
 require_once("../inc/magmi_pluginhelper.php");
@@ -30,18 +30,18 @@ require_once("../inc/magmi_config.php");
 // saving plugin selection
 $epc = new EnabledPlugins_Config($profile);
 $epc->setPropsFromFlatArray(
-    array("PLUGINS_DATASOURCES:class" => $dataSourceClasses, "PLUGINS_GENERAL:classes" => $generalClasses,
-          "PLUGINS_ITEMPROCESSORS:classes" => $itemProcessorClasses)
+    array("PLUGINS_DATASOURCES:class" => $dslist, "PLUGINS_GENERAL:classes" => $genlist,
+        "PLUGINS_ITEMPROCESSORS:classes" => $iplist)
 );
 if ($epc->save()) {
 
     // saving plugins params
-    foreach ($plugins as $className => $pfamily) {
-        if ($className != "") {
-            $pluginInstance = Magmi_PluginHelper::getInstance($profile)->createInstance($pfamily, $className, $_REQUEST);
-            $paramlist = $pluginInstance->getPluginParamNames();
-            $sarr = $pluginInstance->getPluginParams($_REQUEST);
-            $parr = $pluginInstance->getPluginParamsNoCurrent($_REQUEST);
+    foreach ($pflist as $pclass => $pfamily) {
+        if ($pclass != "") {
+            $plinst = Magmi_PluginHelper::getInstance($profile)->createInstance($pfamily, $pclass, $_REQUEST);
+            $paramlist = $plinst->getPluginParamNames();
+            $sarr = $plinst->getPluginParams($_REQUEST);
+            $parr = $plinst->getPluginParamsNoCurrent($_REQUEST);
 
             foreach ($paramlist as $pname) {
                 if (!isset($parr[$pname])) {
@@ -49,14 +49,14 @@ if ($epc->save()) {
                 }
             }
             $farr = array_merge($sarr, $parr);
-            if (!$pluginInstance->persistParams($farr)) {
+            if (!$plinst->persistParams($farr)) {
                 $lasterr = error_get_last();
                 echo "<div class='error'>" . $lasterr['message'] . "</div>";
             }
         }
     }
     $date = filemtime($epc->getConfFile());
-    echo "Profile $profile saved (" . strftime("%c", $date) . ")";
+    echo "Profile $profile saved (" . date("c", $date) . ")";
 } else {
     $lasterr = error_get_last();
     echo "<div class='error'>" . $lasterr['message'] . "</div>";

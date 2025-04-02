@@ -1,14 +1,14 @@
 {
-    "name": "dweeves/magmi",
+    "name": "marventhieme/magmi-m2",
     "description": "Magento Mass Importer",
     "license": "MIT",
     "homepage": "http://sourceforge.net/projects/magmi/",
     "authors":[
         {
             "name":"Sebastien Bracquemont"
+        },
+        {
+            "name":"Marven Thieme"
         }
-    ],
-    "bin": [
-        "magmi/cli/magmi.cli.php"
     ]
 }
